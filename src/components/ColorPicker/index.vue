@@ -246,7 +246,7 @@
   const onDropper = () => {
     if (!eyeDropper) eyeDropper = new EyeDropper();
     state.isDropper = true;
-    eyeDropper
+    (eyeDropper as EyeDropper)
       .open()
       .then((result: any) => {
         state.isDropper = false;

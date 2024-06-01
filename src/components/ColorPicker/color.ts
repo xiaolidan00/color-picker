@@ -4,7 +4,11 @@ const to16 = (value: number) => {
   value = Math.min(Math.round(value), 255);
   const high = Math.floor(value / 16);
   const low = value % 16;
-  return '' + (INT_HEX_MAP[high] || high) + (INT_HEX_MAP[low] || low);
+  return (
+    '' +
+    (INT_HEX_MAP[high as keyof typeof INT_HEX_MAP] || high) +
+    (INT_HEX_MAP[low as keyof typeof INT_HEX_MAP] || low)
+  );
 };
 export const rgb2hex = (r: number, g: number, b: number) => {
   if (isNaN(r) || isNaN(g) || isNaN(b)) return '';
@@ -15,8 +19,10 @@ export const hex2rgb = (hex: string) => {
   const hexStr = hex.substring(1);
   const result = [0, 0, 0];
   for (let i = 0; i < 6; i = i + 2) {
-    const high = (HEX_INT_MAP[hexStr[i].toUpperCase()] || +hexStr[i]) * 16;
-    const low = HEX_INT_MAP[hexStr[i + 1].toUpperCase()] || +hexStr[i + 1];
+    const high =
+      (HEX_INT_MAP[hexStr[i].toUpperCase() as keyof typeof HEX_INT_MAP] || +hexStr[i]) * 16;
+    const low =
+      HEX_INT_MAP[hexStr[i + 1].toUpperCase() as keyof typeof HEX_INT_MAP] || +hexStr[i + 1];
     result[i / 2] = high + low;
   }
   return {
