@@ -1,13 +1,16 @@
 <template>
   <div class="color-picker">
-    <canvas class="temp-canvas" ref="tempRef" height="1" width="1"></canvas>
     <div class="color-picker-container">
       <div class="color-panel">
         <canvas ref="panelRef"></canvas>
 
         <span
           class="color-panel-thumb"
-          :style="{ top: state.panelY + 'px', left: state.panelX + 'px', background: state.color }"
+          :style="{
+            top: state.panelY + 'px',
+            left: state.panelX + 'px',
+            background: resultColor.rgb
+          }"
         ></span>
       </div>
       <div class="color-bar">
@@ -18,7 +21,16 @@
         ></span>
       </div>
     </div>
-    <div class="color-alpha">
+    <div class="color-gradient">
+      <span
+        :class="[state.activeGrd === i ? 'active' : '']"
+        v-for="(item, i) in state.colorGradients"
+        :key="i"
+        :style="{ backgroundColor: item.rgb }"
+        @click="onGrdColor(i)"
+      ></span>
+    </div>
+    <div class="color-alpha" v-show="isAlpha">
       <div
         class="color-alpha-bar"
         ref="alphaRef"
@@ -29,16 +41,6 @@
       <span
         class="color-alpha-thumb"
         :style="{ left: state.alphaX + 'px', background: resultColor.rgba }"
-      ></span>
-    </div>
-
-    <div class="color-gradient">
-      <span
-        :class="[state.activeGrd === i ? 'active' : '']"
-        v-for="(item, i) in state.colorGradients"
-        :key="i"
-        :style="{ backgroundColor: item.rgb }"
-        @click="onGrdColor(i)"
       ></span>
     </div>
     <div class="color-picker-footer">
@@ -52,6 +54,7 @@
       />
       <input :value="state.color" class="color-picker-input" @change="onInputColor" />
     </div>
+
     <div class="color-list">
       <span
         class="color-span"
@@ -67,15 +70,16 @@
 <script setup lang="ts">
   import { ref, onMounted, reactive, onBeforeUnmount, nextTick, computed, watch } from 'vue';
   import { onDragMove } from './DragMove';
-  import { rgb2hsv, getRgba } from './color';
+  import { rgb2hsv, getRgba, hsl2rgb, formatColor } from './color';
   const emit = defineEmits(['update:modelValue', 'change']);
   interface Props {
     modelValue: string;
     colors?: string[];
+    format?: string;
   }
   const props = withDefaults(defineProps<Props>(), {
     modelValue: 'rgba(255,0,0,1)',
-    labels: () => [
+    colors: () => [
       '#3E8ADF',
       '#43ABDD',
       '#4EBD98',
@@ -86,8 +90,10 @@
       '#DE6D91',
       '#B064B8',
       '#757ED6'
-    ]
+    ],
+    format: 'rgba'
   });
+  const isAlpha = computed(() => props.format.indexOf('a'));
 
   const barRef = ref<HTMLCanvasElement>();
 
@@ -97,7 +103,12 @@
   let panelImgData: Uint8ClampedArray;
   let panelWidthPx = 0;
   let isLock = false;
-  const tempRef = ref<HTMLCanvasElement>();
+  interface ColorProps {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }
   interface StateInterface {
     barY: number;
     alphaX: number;
@@ -105,7 +116,7 @@
     panelX: number;
     panelY: number;
     bgColor: string;
-    colorSet: { r: number; g: number; b: number; a: number };
+    colorSet: ColorProps;
     colorGradients: Array<{ r: number; g: number; b: number; rgb: string }>;
     activeGrd: number;
     isDropper: boolean;
@@ -122,20 +133,31 @@
     activeGrd: 0,
     isDropper: false
   });
+
   defineExpose({ colorSet: state.colorSet });
   watch(
-    () => state.color,
-    (val: string) => {
+    () => state.colorSet,
+    (val: ColorProps) => {
       if (val) {
-        emit('update:modelValue', val);
-        emit('change', val);
+        const result = formatColor(val.r, val.g, val.b, val.a, props.format);
+        emit('update:modelValue', result);
+        emit('change', result);
       }
+    },
+    {
+      deep: true
     }
   );
   watch(
     () => props.modelValue,
     (v) => {
       if (v != state.color) parseColor();
+    }
+  );
+  watch(
+    () => props.format,
+    () => {
+      parseColor();
     }
   );
   const colorList = computed((): string[] => {
@@ -155,6 +177,7 @@
     b: number;
   }
   const getImageDataColor = (imgData: Uint8ClampedArray, i: number): DataColor | undefined => {
+    // i = Math.floor(i / 4) * 4;
     if (i >= 0 && i <= imgData.length - 5) {
       const r = imgData[i];
       const g = imgData[i + 1];
@@ -169,42 +192,11 @@
       };
     }
   };
-  const onBarMove = (ev: MouseEvent) => {
-    const canvas = barRef.value;
-    if (canvas) {
-      let y = ev.offsetY;
-      if (y < 0) {
-        y = 0;
-      } else if (y > canvas.height) {
-        y = canvas.height;
-      }
-      state.barY = y;
-      const i = y * 4;
-      const res = getImageDataColor(barImgData, i);
-      if (res) {
-        const { color } = res;
-        console.log(`%c color`, 'background:' + color, color);
-        state.bgColor = color;
-        if (!isLock) {
-          isLock = true;
-          nextTick(() => {
-            createPanel();
-            getPanelColor();
-            isLock = false;
-          });
-        }
-      }
-    }
-  };
-  const dragmoveBar = onDragMove({
-    start: onBarMove,
-    move: onBarMove,
-    end: onBarMove
-  });
+
   const getPanelColor = () => {
     const x = state.panelX,
       y = state.panelY;
-    const i = (y <= 1 ? 0 : (y - 1) * panelWidthPx) + x * 4;
+    const i = (y <= 1 ? 0 : (y - 1) * panelWidthPx) + (x <= 1 ? 0 : (x - 1) * 4);
     const res = getImageDataColor(panelImgData, i);
     if (res) {
       const { color, r, g, b } = res;
@@ -213,7 +205,8 @@
       state.colorSet.r = r;
       state.colorSet.g = g;
       state.colorSet.b = b;
-      state.color = `rgba(${r},${g},${b},${state.colorSet.a})`;
+      state.color = formatColor(r, g, b, state.colorSet.a, props.format);
+
       getGradients(r, g, b);
     }
   };
@@ -221,66 +214,37 @@
     let { h, s } = rgb2hsv(r, g, b);
     h = Math.floor(h);
     s = Math.floor(s);
-    if (tempRef.value) {
-      const ctx = tempRef.value.getContext('2d');
-      if (ctx) {
-        const grdList = [];
-        const len = 11;
-        let minDist = 255 * 3;
-        let idx = 0;
-        for (let i = 0; i <= len; i++) {
-          const c = `hsl(${h}deg,${s}%,${Math.floor((i / len) * 100)}%)`;
-          ctx.fillStyle = c;
-          ctx.fillRect(0, 0, 1, 1);
-          const imgData = ctx.getImageData(0, 0, 1, 1).data;
-          const item = {
-            r: imgData[0],
-            g: imgData[1],
-            b: imgData[2]
-          };
-          grdList.push({ rgb: `rgb(${item.r},${item.g},${item.b})`, ...item });
-          const d = Math.abs(item.r - r) + Math.abs(item.g - g) + Math.abs(item.b - b);
-          if (d < minDist) {
-            minDist = d;
-            idx = i;
-          }
-        }
-        state.colorGradients = grdList;
-        state.activeGrd = idx;
+
+    const grdList = [];
+    const len = 11;
+    let minDist = 255 * 3;
+    let idx = 0;
+    for (let i = 0; i <= len; i++) {
+      const c = hsl2rgb(h, s, Math.floor((i / len) * 100));
+
+      grdList.push({ rgb: `rgb(${c.r},${c.g},${c.b})`, ...c });
+      const d = Math.abs(c.r - r) + Math.abs(c.g - g) + Math.abs(c.b - b);
+      if (d < minDist) {
+        minDist = d;
+        idx = i;
       }
     }
+    state.colorGradients = grdList;
+    state.activeGrd = idx;
   };
-  const onMovePanel = (ev: MouseEvent) => {
-    const canvas = panelRef.value;
-    if (canvas) {
-      let x = ev.offsetX;
-      if (x < 0) {
-        x = 0;
-      } else if (x > canvas.width) {
-        x = canvas.width;
-      }
-      let y = ev.offsetY;
-      if (y < 0) {
-        y = 0;
-      } else if (y > canvas.height) {
-        y = canvas.height;
-      }
-      state.panelX = x;
-      state.panelY = y;
-      getPanelColor();
-    }
-  };
+
   const onGrdColor = (idx: number) => {
-    const item = state.colorGradients[idx];
+    const { r, g, b } = state.colorGradients[idx];
 
     state.activeGrd = idx;
-    state.colorSet.r = item.r;
-    state.colorSet.g = item.g;
-    state.colorSet.b = item.b;
-    state.color = `rgba(${item.r},${item.g},${item.b},${state.colorSet.a})`;
+    state.colorSet.r = r;
+    state.colorSet.g = g;
+    state.colorSet.b = b;
+    state.color = formatColor(r, g, b, state.colorSet.a, props.format);
   };
+  let eyeDropper: unknown;
   const onDropper = () => {
-    const eyeDropper = new EyeDropper();
+    if (!eyeDropper) eyeDropper = new EyeDropper();
     state.isDropper = true;
     eyeDropper
       .open()
@@ -298,9 +262,8 @@
     const res = getRgba(c);
 
     if (res) {
-      const { r, g, b, a, color } = res;
-      console.log(res);
-      state.color = color;
+      const { r, g, b, a } = res;
+      state.color = formatColor(r, g, b, a, props.format);
       const hsv = rgb2hsv(r, g, b);
       if (barRef.value) {
         state.barY = Math.floor(hsv.h1 * barRef.value.height);
@@ -325,11 +288,6 @@
     const target = ev.target as HTMLInputElement;
     if (target) parseColor(target.value);
   };
-  const dragmovePanel = onDragMove({
-    start: onMovePanel,
-    move: onMovePanel,
-    end: onMovePanel
-  });
 
   const createPanel = () => {
     const canvas = panelRef.value;
@@ -402,8 +360,8 @@
       }
       state.alphaX = x;
       state.colorSet.a = getAlpha(1 - x / w);
-
-      state.color = `rgba(${resultColor.value.num},${state.colorSet.a})`;
+      const { r, g, b, a } = state.colorSet;
+      state.color = formatColor(r, g, b, a, props.format);
     }
   };
   const dragmoveAlpha = onDragMove({
@@ -411,6 +369,66 @@
     move: onAlphaMove,
     end: onAlphaMove
   });
+
+  const onMovePanel = (ev: MouseEvent) => {
+    const canvas = panelRef.value;
+    if (canvas) {
+      let x = ev.offsetX;
+      if (x < 0) {
+        x = 0;
+      } else if (x > canvas.width) {
+        x = canvas.width;
+      }
+      let y = ev.offsetY;
+      if (y < 0) {
+        y = 0;
+      } else if (y > canvas.height) {
+        y = canvas.height;
+      }
+      state.panelX = x;
+      state.panelY = y;
+      getPanelColor();
+    }
+  };
+  const dragmovePanel = onDragMove({
+    start: onMovePanel,
+    move: onMovePanel,
+    end: onMovePanel
+  });
+
+  const onBarMove = (ev: MouseEvent) => {
+    const canvas = barRef.value;
+    if (canvas) {
+      let y = ev.offsetY;
+      if (y < 0) {
+        y = 0;
+      } else if (y > canvas.height) {
+        y = canvas.height;
+      }
+      state.barY = y;
+      const i = y * 4;
+      const res = getImageDataColor(barImgData, i);
+      if (res) {
+        const { color } = res;
+        console.log(`%c color`, 'background:' + color, color);
+        state.bgColor = color;
+        if (!isLock) {
+          isLock = true;
+          nextTick(() => {
+            createPanel();
+            getPanelColor();
+            isLock = false;
+          });
+        }
+      }
+    }
+  };
+  const dragmoveBar = onDragMove({
+    start: onBarMove,
+    move: onBarMove,
+    end: onBarMove
+  });
+
   onMounted(() => {
     createBar();
     parseColor();
@@ -435,7 +453,7 @@
     --color-picker-radius: 4px;
     border-radius: var(--color-picker-radius);
     padding: 10px;
-    border: var(--color-picker-border);
+    // border: var(--color-picker-border);
     text-align: left;
     box-sizing: border-box;
     > div:not(:last-child) {
@@ -444,12 +462,6 @@
     * {
       user-select: none;
       box-sizing: border-box;
-    }
-
-    .temp-canvas {
-      pointer-events: none;
-      opacity: 0;
-      position: absolute;
     }
 
     &-footer {
@@ -598,10 +610,9 @@
         height: 100%;
         flex: 1;
         display: inline-block;
-
+        box-shadow: var(--color-picker-shadow);
         &.active {
           transform: scale(1.2);
-          box-shadow: var(--color-picker-shadow);
         }
       }
     }

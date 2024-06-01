@@ -3,6 +3,8 @@
   import { ref, watch } from 'vue';
   const colorRef = ref('#FFFF00');
   const pickerRef = ref();
+  const formatRef = ref('rgba');
+  const list = ['hsl', 'rgb', 'rgba', 'hex'];
   watch(
     () => colorRef.value,
     () => {
@@ -13,23 +15,34 @@
 
 <template>
   <div>
-    <ColorPicker v-model="colorRef" ref="pickerRef"></ColorPicker>
+    <div class="format-list">
+      <span
+        v-for="it in list"
+        @click="formatRef = it"
+        :class="[formatRef == it ? 'active' : '']"
+        :key="it"
+        >{{ it }}
+      </span>
+    </div>
+
+    <ColorPicker v-model="colorRef" ref="pickerRef" :format="formatRef"></ColorPicker>
     <div :style="{ background: colorRef, height: '100px', width: '100px', margin: '30px' }"></div>
   </div>
-  <HelloWorld msg="Vite + Vue" />
 </template>
 
-<style scoped>
-  .logo {
-    height: 6em;
-    padding: 1.5em;
-    will-change: filter;
-    transition: filter 300ms;
-  }
-  .logo:hover {
-    filter: drop-shadow(0 0 2em #646cffaa);
-  }
-  .logo.vue:hover {
-    filter: drop-shadow(0 0 2em #42b883aa);
+<style scoped lang="scss">
+  .format-list > span {
+    display: inline-block;
+    height: 40px;
+    width: 70px;
+    line-height: 40px;
+    color: #ccc;
+    cursor: pointer;
+    &:not(:last-child) {
+      margin-right: 10px;
+    }
+    &.active {
+      color: dodgerblue;
+    }
   }
 </style>
