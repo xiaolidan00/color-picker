@@ -453,7 +453,7 @@
     --color-picker-radius: 4px;
     border-radius: var(--color-picker-radius);
     padding: 10px;
-    // border: var(--color-picker-border);
+    border: var(--color-picker-border);
     text-align: left;
     box-sizing: border-box;
     > div:not(:last-child) {
