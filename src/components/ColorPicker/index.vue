@@ -235,7 +235,12 @@
 
   const onGrdColor = (idx: number) => {
     const { r, g, b } = state.colorGradients[idx];
-
+    const { s1, v1 } = rgb2hsv(r, g, b);
+    const canvas = panelRef.value;
+    if (canvas) {
+      state.panelX = Math.floor(s1 * canvas.width);
+      state.panelY = Math.floor((1 - v1) * canvas.height);
+    }
     state.activeGrd = idx;
     state.colorSet.r = r;
     state.colorSet.g = g;
